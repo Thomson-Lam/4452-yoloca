@@ -1,10 +1,12 @@
-# YOLOCA — YOLO + OCR Computer Agent
+# YOLOCA: YOLO + OCR Computer Agent
 
 ## Abstract
 
-Current industry standard computer use agents that operate desktop applications autonomously primarily depend on Vision-Language Models (VLMs) to interpret screenshots, incurring high cost (~$0.01-0.03 per step), high latency (1-3 seconds per inference), and opaque visual reasoning. We propose **YOLOCA**, a novel architecture that decomposes VLM-based perception into two lightweight stages of vision and reasoning: a YOLO object detector that localizes UI elements and an OCR pass that extracts their text labels. The combined output is a structured text representation of the screen state, which a **text-only LLM** consumes to reason and act. This eliminates the need for a more compute intensive vision model at inference time. On constrained single-application benchmarks, YOLOCA can achieve superior performance, such as a 5-30x reduction in per-step cost and 2-3x reduction in latency compared to VLM-based agents. We incorporate **yolodex** in our training process, an autonomous pipeline that trains application-specific YOLO models from raw screen recordings with no explicit manual labeling.
+Current industry standard computer use agents that operate desktop applications autonomously primarily depend on Vision-Language Models (VLMs) to interpret screenshots, incurring high cost (~$0.01-0.03 per step), high latency (1-3 seconds per inference), and opaque visual reasoning. We propose **YOLOCA**, a novel architecture that decomposes VLM-based perception into two lightweight stages of vision and reasoning: a YOLO object detector that localizes UI elements and an OCR pass that extracts their text labels, then forwarding the aggregated results to a LLM agent for inference and reasoning. The combined output is a structured text representation of the screen state, which a **text-only LLM** consumes to reason and act. This eliminates the need for a more compute intensive vision model at inference time. On constrained single-application benchmarks, YOLOCA can achieve superior performance, such as a 5-30x reduction in per-step cost and 2-3x reduction in latency compared to VLM-based agents. We incorporate **yolodex** in our training process, an autonomous pipeline that trains application-specific YOLO models from raw screen recordings with no explicit manual labeling.
 
 > NOTE: the system architecture TBD, might not need OCR if the work is done during data labelling, and is reusable. Hence, a single pass would be more than enough here.
+
+Because each state can be modelled as a tree of states, we can additionally model the step by step process similar to a tree during inference. We can perhaps do more here, after testing the proof of concept architecture for the assignment first?
 
 ---
 
@@ -18,8 +20,8 @@ The cost and risk adds up as context increases exponentially. A single VLM scree
 
 Additionally, images of prior states of the desktop may not be always beneficial to encode and compute attention over (the next action does not always depend on the previous one). This representation method is slow and costly, with the added latency making it harder for practical, end-to-end use. We argue that utilizing a textual representation of UI elements, and the semantic meaning of each element, in a text-native approach, is a more efficient and flexible method, with a mature context engineering ecosystem and best industry practices battle-tested and developed for LLM agents first.
 
-In layman terms: the argument is that instead one big expensive model that does everything, which is unpredictable, slow and expensive, we break it down and use YOLO nano, which can be run on your laptop just fine, for the
-vision work; we can train specialized YOLO models for specific applications or desktops for use, and make a LLM agent first approach to center the YOLO as submodules and tools for the central AI agent to call and use. 
+In layman terms: the argument is that instead one big expensive model that does everything, which is unpredictable, slow and expensive and hence not scalable for long running turns, we break it down and use YOLO nano, which can be run on your laptop just fine, for the
+vision work; we can train specialized YOLO models for specific applications or desktops for use, and make a LLM agent first approach to center the YOLO as submodules and tools for the central AI agent to call and use. This would also give us a lot of flexibility on how to structure LLM agents and optimize context and efficiency for long running turns, maybe even multi-agent setup for different yutilies or functionalities.
 
 Additional context optimizations can be explored upon later.
 
@@ -27,9 +29,9 @@ Additional context optimizations can be explored upon later.
 
 YOLOCA separates the VLM's three jobs into specialized components:
 
-1. **Perceive** — A YOLOv8n model detects UI elements (buttons, text fields, dropdowns, checkboxes) and outputs bounding boxes with class labels. Inference: ~5ms on CPU.
-2. ((Optional)) **Read** — OCR (EasyOCR / Tesseract) runs on each cropped detection to extract the text label. "Submit", "Cancel", "Enter email" — the semantic content the LLM needs. Inference: ~50-200ms total.
-3. **Reason** — A text-only LLM receives the structured text representation and decides the next action. No image tokens, no vision encoder — just text in, tool call out.
+1. **Perception**: A YOLOv8n model detects UI elements (buttons, text fields, dropdowns, checkboxes) and outputs bounding boxes with class labels. Inference: ~5ms on CPU.
+2. ((Optional)) **Reading** — OCR (EasyOCR / Tesseract) runs on each cropped detection to extract the text label. "Submit", "Cancel", "Enter email" — the semantic content the LLM needs. Inference: ~50-200ms total.
+3. **Reasoning** — A text-only LLM receives the structured text representation and decides the next action. No image tokens, no vision encoder — just text in, tool call out.
 
 The LLM never sees pixels. It sees:
 
@@ -43,7 +45,7 @@ Task: Submit the registration form.
 Action history: [typed "user@email.com" in text_field at (0.50, 0.50)]
 ```
 
-A text-only LLM can reason over this. It knows what "Submit" means, it knows the spatial layout, and it can decide the next action. No expensive and slow image encoding is done, and the attention mechanism can focus on rich textual meanings instead of accumulating images.
+A text-only LLM can reason over this. It knows what "Submit" means, it knows the spatial layout, and it can decide the next action. No expensive and slow image encoding is done, and the attention mechanism can focus on rich textual meanings instead of accumulating images over long running turns.
 
 ### Key Optimizations and Novelties
 
@@ -55,7 +57,7 @@ A text-only LLM can reason over this. It knows what "Submit" means, it knows the
 
 **4. Autonomous training pipeline (yolodex).** Training an application-specific YOLO model typically requires manual labeling. Yolodex automates the full pipeline: record video of app usage → extract frames → label with vision models (GPT, Gemini, or Codex subagents) → augment (5x multiplier) → train YOLOv8n → evaluate → iterate until target mAP@50 is reached. Parallel labeling via git worktrees scales to large frame sets.
 
-### Constrained Scope
+### Constrained Scope for purposes of the assignment (and runnablility)
 
 Instead of targeting all desktop applications, we constrain the agent to **one specific app with 5-10 defined actions**:
 
